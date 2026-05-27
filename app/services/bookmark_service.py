@@ -10,7 +10,14 @@ from app.core.errors import BookmarkNotFoundError, DuplicateBookmarkError
 
 def _get_or_create_tags(db: Session, names: List[str]) -> List[Tag]:
     tags = []
+    seen = set()
+    unique_names = []
     for name in names:
+        if name in seen:
+            continue
+        seen.add(name)
+        unique_names.append(name)
+    for name in unique_names:
         tag = db.query(Tag).filter(Tag.name == name).first()
         if not tag:
             tag = Tag(name=name)
