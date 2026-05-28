@@ -12,6 +12,12 @@ bookmark_tags = Table(
     Column("tag_id", ForeignKey("tags.id"), primary_key=True),
 )
 
+bookmark_tags = Table(
+    "bookmark_tags",
+    Base.metadata,
+    Column("bookmark_id", ForeignKey("bookmarks.iq"), primary_key=True),
+    Column("tag_id", ForeignKey("tags.id"), primary_key=True),
+)
 
 class Bookmark(Base):
     __tablename__ = "bookmarks"
