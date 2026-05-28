@@ -1,8 +1,24 @@
+# =============================================================================
+# WORKFLOW 1: PR REVIEW (Approach A - headless CLI)
+# Reviews every pull request using Claude Code run non-interactively.
+# Demonstrates the exam-tested flags: -p, --output-format json, --max-turns.
+# =============================================================================
+ 
+
+
 name: PR Review with Claude Code
+
+# --- TRIGGER ---
+# Runs when a PR is opened, and again every time new commits are pushed to it.
 
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [opened, synchronize]  # synchronize = new push to an existing PR
+
+
+# --- PERMISSIONS (least privilege) ---
+# This workflow only READS code and WRITES comments. It never modifies code,
+# so contents stays read-only. Compare with Workflow 2, which needs write.
 
 permissions:
   contents: read
@@ -12,10 +28,17 @@ jobs:
   review:
     runs-on: ubuntu-latest
     steps:
+      # --- STEP 1: Get the code ---
+      # fetch-depth: 0 pulls full git history. We NEED this because the next
+      # step diffs against the base branch, which requires its history.
       - name: Check out the code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # --- STEP 2: Work out what changed ---
+      # The three-dot (...) diff shows only the PR's own changes, not unrelated
+      # commits the base branch made after this PR branched off.  
 
       - name: Generate diff against base
         run: |
@@ -28,6 +51,8 @@ jobs:
             mv /tmp/pr.diff.truncated /tmp/pr.diff
           fi
 
+      # --- STEP 3: Install Claude Code ---
+      # Claude Code is a Node.js tool installed via npm (NOT pip/brew).
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -36,6 +61,9 @@ jobs:
       - name: Install Claude Code
         run: npm install -g @anthropic-ai/claude-code
 
+
+      # --- STEP 4: Run Claude Code headlessly (THE KEY EXAM STEP) ---
+      # The API key reaches Claude only via this env var; never hardcode it.
       - name: Review PR with Claude Code
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -89,6 +117,10 @@ jobs:
           cat /tmp/response.json
           echo "--- End raw response ---"
 
+
+      # --- STEP 5: Parse the JSON and build a comment ---
+      # Claude's output has TWO layers: the outer wrapper (from --output-format
+      # json) and the inner JSON Claude produced. We unwrap both.
       - name: Parse JSON and format comment
         run: |
           ERROR=$(jq -r '.error // empty' /tmp/response.json)
@@ -136,6 +168,11 @@ jobs:
           echo "--- Comment to post ---"
           cat /tmp/comment.md
 
+      # --- STEP 6: Post the comment ---
+      # GITHUB_TOKEN is auto-provided by Actions (you do NOT create it). It only
+      # has the powers granted in the permissions block above. gh reads it via
+      # the GH_TOKEN env var.
+
       - name: Post review comment
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -143,6 +180,11 @@ jobs:
           gh pr comment ${{ github.event.pull_request.number }} \
             --repo ${{ github.repository }} \
             --body-file /tmp/comment.md
+
+      # --- STEP 7: Quality gate (stretch goal) ---
+      # Runs AFTER the comment so the author always sees findings even when the
+      # build fails. exit 1 turns the check red; with branch protection it can
+      # block merge entirely.
 
       - name: Quality gate - fail on critical issues
         run: |

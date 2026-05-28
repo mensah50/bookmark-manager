@@ -1,0 +1,74 @@
+# =============================================================================
+# WORKFLOW 2: @claude MENTION HANDLER (Approach B - official action)
+# Responds to "@claude" mentions in issues and PR comments. Can implement
+# small fixes (edit files, push commits) because it uses the official action.
+#
+# WHY THE OFFICIAL ACTION HERE? Workflow 1 used the raw CLI for fine control
+# over output. This workflow wants Claude to ACT (edit, commit), which the
+# action handles for us - doing it by hand would be hundreds of lines.
+# =============================================================================
+
+
+
+name: Claude Mention Handler
+
+# --- TRIGGERS ---
+# Three events because @claude could appear in three different places:
+#   issue_comment              - a comment on an issue OR a PR conversation
+#   pull_request_review_comment - a comment on a specific line in a PR diff
+#   issues                     - the body of a newly opened/assigned issue
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [opened, assigned]
+
+jobs:
+  claude:
+    # --- THE COST GUARD ---
+    # Without this, the job would fire on EVERY comment in the repo. This
+    # filter limits it to comments/bodies that actually contain "@claude".
+    # Note it reads a different field per event (comment.body vs issue.body)
+    # because each event's payload is shaped differently.
+
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'issues' && contains(github.event.issue.body, '@claude'))
+    runs-on: ubuntu-latest
+
+        # --- PERMISSIONS ---
+    # contents: WRITE (not read) is the key difference from Workflow 1.
+    # This workflow may implement fixes - editing files and pushing commits -
+    # which requires write access to repository contents. Grant write only
+    # when you actually want Claude making changes.
+
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # --- RUN CLAUDE VIA THE OFFICIAL ACTION ---
+      # The action detects the trigger, extracts the user's request from the
+      # comment, runs Claude with repo context, posts the reply, and pushes any
+      # commits Claude makes. claude_args passes CLI flags straight through.
+      # --max-turns 10 (higher than Workflow 1's 5) because implementing a fix
+      # needs more iterations than just reviewing: read, edit, test, verify.
+
+
+
+      - name: Run Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: |
+            --max-turns 10
