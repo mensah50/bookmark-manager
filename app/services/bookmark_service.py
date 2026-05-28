@@ -27,6 +27,7 @@ def _get_or_create_tags(db: Session, names: List[str]) -> List[Tag]:
 
 
 def create_bookmark(db: Session, data: BookmarkCreate) -> Bookmark:
+    """Create and persist a new bookmark with its tags, raising DuplicateBookmarkError if the URL already exists."""
     bookmark = Bookmark(
         url=str(data.url),
         title=data.title,
